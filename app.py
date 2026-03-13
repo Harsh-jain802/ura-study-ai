@@ -6,7 +6,7 @@ import google.generativeai as genai
 # 1. API CONFIGURATION
 # ==========================================
 # Instead of hardcoding the key, we pull it from the cloud "Secrets"
-API_KEY = st.secrets["AIzaSyCjsE9P_VCXSjtDP67_8zs5LrwK4UcS_vc"] # 🚨 PASTE YOUR KEY HERE
+API_KEY = st.secrets["GEMINI_API_KEY"] # 🚨 PASTE YOUR KEY HERE
 genai.configure(api_key=API_KEY)
 
 # ==========================================
