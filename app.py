@@ -5,12 +5,12 @@ import google.generativeai as genai
 # ==========================================
 # 1. API CONFIGURATION
 # ==========================================
-# We pull the key from the Streamlit Secrets vault
+# Securely pulling from Streamlit Secrets
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 
 # ==========================================
-# 2. SESSION STATE (App Memory)
+# 2. SESSION STATE
 # ==========================================
 if 'history' not in st.session_state:
     st.session_state.history = []  
@@ -26,7 +26,6 @@ st.markdown("""
     <style>
     .stApp { background: radial-gradient(circle at top right, #1a1f2c, #0b0e14); }
     section[data-testid="stSidebar"] { background-color: #0d1117 !important; border-right: 1px solid #30363d; }
-    
     .main-card {
         background: rgba(22, 27, 34, 0.8);
         border: 1px solid #3a7bd5;
@@ -35,7 +34,6 @@ st.markdown("""
         backdrop-filter: blur(12px);
         margin-bottom: 20px;
     }
-    
     .hero-text {
         background: linear-gradient(90deg, #4facfe, #00f2fe);
         -webkit-background-clip: text;
@@ -43,9 +41,8 @@ st.markdown("""
         font-size: 2.8rem !important;
         font-weight: 800 !important;
     }
-
     .tutor-box {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(79, 172, 254, 0.1);
         border-radius: 15px;
         padding: 15px;
         border: 1px dashed #4facfe;
@@ -54,11 +51,23 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. MODEL PICKER
+# 4. BULLETPROOF MODEL PICKER (Fixed the NotFound error)
 # ==========================================
 @st.cache_resource
 def get_model():
-    return genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        # Ask Google for the list of models YOU are allowed to use
+        available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Priority list
+        if 'models/gemini-1.5-flash' in available: return genai.GenerativeModel('models/gemini-1.5-flash')
+        if 'models/gemini-1.5-flash-latest' in available: return genai.GenerativeModel('models/gemini-1.5-flash-latest')
+        
+        # Fallback to the first working model it finds
+        return genai.GenerativeModel(available[0])
+    except Exception:
+        # Last resort fallback string
+        return genai.GenerativeModel('gemini-1.5-flash')
 
 model = get_model()
 
@@ -85,30 +94,32 @@ st.markdown("<h1 class='hero-text'>Aura Study AI</h1>", unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns([1, 1.5, 1], gap="medium")
 
-# --- COLUMN 1: UPLOAD ---
 with col1:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     st.markdown("### 📂 Upload")
     uploaded_file = st.file_uploader("", type="pdf")
     
     if uploaded_file and st.button("🚀 ANALYZE"):
-        with st.spinner("Processing..."):
-            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            text = "".join([doc.load_page(i).get_text() for i in range(min(5, len(doc)))])
-            
-            prompt = f"Create a Master Concept, 4 Pillars, an Analogy, and a 2-question quiz for this text: {text}"
-            response = model.generate_content(prompt)
-            
-            st.session_state.history.append({
-                "title": uploaded_file.name, 
-                "result": response.text,
-                "full_text": text # Keep text for the Tutor
-            })
-            st.session_state.active_index = len(st.session_state.history) - 1
-            st.rerun()
+        with st.spinner("Analyzing..."):
+            try:
+                doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+                text = "".join([doc.load_page(i).get_text() for i in range(min(5, len(doc)))])
+                
+                prompt = f"Summarize this text with a Master Concept, 4 Pillars, an Analogy, and a 2-question quiz: {text}"
+                response = model.generate_content(prompt)
+                
+                st.session_state.history.append({
+                    "title": uploaded_file.name, 
+                    "result": response.text,
+                    "full_text": text
+                })
+                st.session_state.active_index = len(st.session_state.history) - 1
+                st.balloons()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- COLUMN 2: RESULTS ---
 active_data = st.session_state.history[st.session_state.active_index] if st.session_state.active_index is not None else None
 
 with col2:
@@ -118,21 +129,20 @@ with col2:
         st.write(active_data['result'])
         st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.info("Upload a PDF to see the study guide here.")
+        st.info("Upload a PDF to get started.")
 
-# --- COLUMN 3: DOUBT SOLVER (New!) ---
 with col3:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     st.markdown("### 💬 Doubt Solver")
     if active_data:
         user_query = st.text_input("Ask a question about this topic...")
         if user_query:
-            with st.spinner("Tutor is thinking..."):
-                tutor_prompt = f"Based on this text: {active_data['full_text']}\n\nAnswer the student's question simply: {user_query}"
+            with st.spinner("Thinking..."):
+                tutor_prompt = f"Context: {active_data['full_text']}\n\nQuestion: {user_query}"
                 ans = model.generate_content(tutor_prompt)
                 st.markdown('<div class="tutor-box">', unsafe_allow_html=True)
-                st.markdown(f"**Aura says:** {ans.text}")
+                st.markdown(ans.text)
                 st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.caption("Summarize a file first to enable the AI Tutor.")
+        st.caption("Summarize a file first to chat with AI Tutor.")
     st.markdown('</div>', unsafe_allow_html=True)
