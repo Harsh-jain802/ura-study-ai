@@ -7,7 +7,7 @@ import google.generativeai as genai
 # ==========================================
 st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 
-# API CONFIG - Ensure 'GEMINI_API_KEY' is in your Streamlit Secrets
+# API CONFIG
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
@@ -15,7 +15,7 @@ except Exception as e:
     st.error("Error: Please add GEMINI_API_KEY to your Streamlit Secrets.")
     st.stop()
 
-# SESSION STATE INITIALIZATION
+# SESSION STATE
 if 'history' not in st.session_state:
     st.session_state.history = []  
 if 'active_index' not in st.session_state:
@@ -24,7 +24,7 @@ if 'active_index' not in st.session_state:
 # UI STYLING
 st.markdown("""
     <style>
-    .stApp { background: radial-gradient(circle at top right, #1a1f2c, #0b0e14); }
+    .stApp { background: radial-gradient(circle at top right, #1a1f2c, #0b0e14); color: white; }
     section[data-testid="stSidebar"] { background-color: #0d1117 !important; border-right: 1px solid #30363d; }
     .hero-text {
         background: linear-gradient(90deg, #4facfe, #00f2fe);
@@ -53,9 +53,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# MODEL INITIALIZATION
 @st.cache_resource
 def get_model():
-    return genai.GenerativeModel('gemini-1.5-flash')
+    # If gemini-1.5-flash fails, it will try to use the older gemini-pro
+    try:
+        return genai.GenerativeModel('gemini-1.5-flash')
+    except:
+        return genai.GenerativeModel('gemini-pro')
 
 model = get_model()
 
@@ -76,24 +81,25 @@ with st.sidebar:
     if uploaded_file and st.button("🚀 UNLOCK KNOWLEDGE", use_container_width=True):
         with st.spinner("🧠 Aura is reading..."):
             try:
-                # Extract text from PDF
                 doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                # Read up to first 10 pages to avoid hitting token limits
+                # Read first 10 pages only to be safe
                 text = "".join([page.get_text() for page in doc][:10])
                 
-                # Ask Gemini for a structured breakdown
+                if not text.strip():
+                    st.error("Could not extract text from this PDF. It might be an image-only scan.")
+                    st.stop()
+
                 prompt = (
-                    f"Analyze this study material and provide a detailed response including:\n"
+                    f"You are a helpful study tutor named Aura. Analyze this study material and provide:\n"
                     f"1. **The Big Picture** (Simplified explanation)\n"
-                    f"2. **Key Pillars** (Bullet points of main topics)\n"
+                    f"2. **Key Pillars** (Main topics)\n"
                     f"3. **Practical Analogy** (Explain like I'm 5)\n"
                     f"4. **2 Self-test questions**\n\n"
-                    f"Text: {text[:4000]}" # Truncate for prompt efficiency
+                    f"Text: {text[:5000]}"
                 )
                 
                 response = model.generate_content(prompt)
                 
-                # Save to history
                 st.session_state.history.append({
                     "title": uploaded_file.name, 
                     "result": response.text, 
@@ -103,26 +109,26 @@ with st.sidebar:
                 st.balloons()
                 st.rerun()
             except Exception as e:
-                st.error(f"Error processing PDF: {e}")
+                st.error(f"Error: {e}")
 
     st.write("---")
-    st.markdown("### 🕒 Recent History")
+    st.markdown("### 🕒 History")
     for i, item in enumerate(reversed(st.session_state.history)):
         real_idx = len(st.session_state.history) - 1 - i
-        if st.button(f"📄 {item['title'][:18]}...", key=f"h_{real_idx}", use_container_width=True):
+        if st.button(f"📄 {item['title'][:15]}...", key=f"h_{real_idx}", use_container_width=True):
             st.session_state.active_index = real_idx
             st.rerun()
 
 # ==========================================
-# 3. MAIN CONTENT AREA
+# 3. MAIN CONTENT
 # ==========================================
 st.markdown("<h1 class='hero-text'>Aura Study AI</h1>", unsafe_allow_html=True)
 
 active_data = st.session_state.history[st.session_state.active_index] if st.session_state.active_index is not None else None
 
 if active_data:
-    st.markdown(f"<p style='color: #94a3b8;'>Current Resource: <b>{active_data['title']}</b></p>", unsafe_allow_html=True)
-    tab1, tab2 = st.tabs(["📑 Study Guide", "💬 AI Doubt Solver"])
+    st.markdown(f"**Resource:** {active_data['title']}")
+    tab1, tab2 = st.tabs(["📑 Study Guide", "💬 Ask Aura"])
     
     with tab1:
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
@@ -130,16 +136,16 @@ if active_data:
         st.markdown('</div>', unsafe_allow_html=True)
         
     with tab2:
-        st.markdown('<div class="content-card">', unsafe_allow_html=True)
-        st.markdown("### 💬 Ask a Doubt")
-        user_query = st.chat_input("Ask Aura anything about this document...")
+        st.markdown('<div class="content-card">')
+        st.write("### 💬 Ask a Doubt")
+        user_query = st.chat_input("Ask anything about this document...")
         if user_query:
             with st.spinner("Thinking..."):
-                tutor_prompt = f"Context from document: {active_data['full_text'][:3000]}\n\nUser Question: {user_query}\n\nAnswer the question based on the document and explain clearly."
+                tutor_prompt = f"Context: {active_data['full_text'][:4000]}\n\nUser Question: {user_query}"
                 ans = model.generate_content(tutor_prompt)
                 st.markdown(f'<div class="tutor-bubble"><b>Aura says:</b><br><br>{ans.text}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.write("---")
-    st.markdown("### 👋 Welcome! Upload a PDF in the sidebar to begin your study session.")
-    st.image("https://img.freepik.com/free-vector/digital-lifestyle-concept-illustration_114360-7327.jpg", width=600)
+    st.markdown("### 👋 Welcome! Upload a PDF to start.")
+    st.image("https://img.freepik.com/free-vector/digital-lifestyle-concept-illustration_114360-7327.jpg", width=500)
