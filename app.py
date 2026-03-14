@@ -4,20 +4,33 @@ import google.generativeai as genai
 from streamlit_google_auth import Authenticate
 
 # ==========================================
-# 1. AUTHENTICATION SETUP (The New Part)
 # ==========================================
+# 1. AUTHENTICATION SETUP (Fixed Version)
+# ==========================================
+
+# We create a dictionary that looks like the Google JSON file
+# using the secrets you entered in the dashboard
+credentials = {
+    "web": {
+        "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+        "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "redirect_uris": ["https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app"]
+    }
+}
+
+# Now we pass that dictionary directly
 authenticator = Authenticate(
-    secret_credentials_path=None,
-    client_id=st.secrets["GOOGLE_CLIENT_ID"],
-    client_secret=st.secrets["GOOGLE_CLIENT_SECRET"],
-    # This MUST match the Redirect URI you saved in Google Console
-    redirect_uri="https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app", 
-    cookie_name="aura_auth",
-    cookie_key="aura_secure_key",
+    secret_credentials_path=credentials, # Pass the dictionary here
+    cookie_name="aura_auth_cookie",
+    cookie_key="aura_secure_key_123",
     cookie_expiry_days=30,
 )
 
 # Check if the user is already logged in
+authenticator.check_authenticity()
 authenticator.check_authenticity()
 
 # If user is NOT logged in, show login screen and STOP
