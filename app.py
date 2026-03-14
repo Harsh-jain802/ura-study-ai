@@ -2,50 +2,55 @@ import streamlit as st
 import fitz  # PyMuPDF
 import google.generativeai as genai
 from streamlit_google_auth import Authenticate
+import json
+import os
 
 # ==========================================
-# ==========================================
-# 1. AUTHENTICATION SETUP (Fixed Version)
+# 1. AUTHENTICATION & SECRET FILE CREATION
 # ==========================================
 
-# We create a dictionary that looks like the Google JSON file
-# using the secrets you entered in the dashboard
-credentials = {
-    "web": {
-        "client_id": st.secrets["GOOGLE_CLIENT_ID"],
-        "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "redirect_uris": ["https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app"]
+# This part creates the 'client_secrets.json' file that the library needs
+def create_secrets_file():
+    google_secrets = {
+        "web": {
+            "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+            "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": ["https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app"]
+        }
     }
-}
+    with open('client_secrets.json', 'w') as f:
+        json.dump(google_secrets, f)
 
-# Now we pass that dictionary directly
+# Run the file creator
+create_secrets_file()
+
+# Initialize the Authenticator using the file path
+# We use only the 4 standard arguments to avoid TypeErrors
 authenticator = Authenticate(
-    secret_credentials_path=credentials, # Pass the dictionary here
-    cookie_name="aura_auth_cookie",
-    cookie_key="aura_secure_key_123",
-    cookie_expiry_days=30,
+    secret_credentials_path='client_secrets.json',
+    cookie_name='aura_study_cookie',
+    cookie_key='aura_secret_key_123',
+    cookie_expiry_days=30
 )
 
-# Check if the user is already logged in
-authenticator.check_authenticity()
+# Check login status
 authenticator.check_authenticity()
 
-# If user is NOT logged in, show login screen and STOP
+# If NOT logged in, show login screen and STOP
 if not st.session_state.get("connected"):
     st.set_page_config(page_title="Aura AI - Login", page_icon="✨")
     st.markdown("<h1 style='text-align: center; color: #4facfe;'>✨ Aura Study AI</h1>", unsafe_allow_html=True)
-    st.write("### Welcome! Please sign in with Google to continue.")
-    
-    # This displays the actual "Login with Google" button
+    st.write("### Welcome! Please sign in with Google to access your dashboard.")
     authenticator.login()
     st.stop() 
 
 # ==========================================
-# 2. YOUR ORIGINAL APP CODE (Runs after login)
+# 2. APP CONFIGURATION (Runs after login)
 # ==========================================
+st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 
 # API CONFIG
 API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -57,9 +62,7 @@ if 'history' not in st.session_state:
 if 'active_index' not in st.session_state:
     st.session_state.active_index = None
 
-# UI CONFIG & STYLING (Your Premium UI)
-st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
-
+# UI STYLING
 st.markdown("""
     <style>
     .stApp { background: radial-gradient(circle at top right, #1a1f2c, #0b0e14); }
@@ -77,6 +80,14 @@ st.markdown("""
         border-radius: 20px;
         padding: 40px;
         backdrop-filter: blur(12px);
+        margin-top: 20px;
+    }
+    .tutor-bubble {
+        background: rgba(79, 172, 254, 0.1);
+        padding: 20px;
+        border-radius: 15px;
+        border-left: 5px solid #4facfe;
+        margin-top: 20px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -87,13 +98,13 @@ def get_model():
 
 model = get_model()
 
-# SIDEBAR (Updated with Logout)
+# SIDEBAR
 with st.sidebar:
     st.markdown("<h2 style='color: #4facfe;'>✨ Aura AI</h2>", unsafe_allow_html=True)
     
-    # Show who is logged in
-    user_email = st.session_state.get('user_info', {}).get('email', 'Student')
-    st.write(f"Logged in: **{user_email}**")
+    # Display User Info
+    user = st.session_state.get('user_info', {})
+    st.write(f"Logged in: **{user.get('email', 'Student')}**")
     
     if st.button("Logout", use_container_width=True):
         authenticator.logout()
@@ -122,6 +133,14 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Error: {e}")
 
+    st.write("---")
+    st.markdown("### 🕒 Recent History")
+    for i, item in enumerate(reversed(st.session_state.history)):
+        real_idx = len(st.session_state.history) - 1 - i
+        if st.button(f"📄 {item['title'][:18]}...", key=f"h_{real_idx}", use_container_width=True):
+            st.session_state.active_index = real_idx
+            st.rerun()
+
 # MAIN CONTENT
 st.markdown("<h1 class='hero-text'>Aura Study AI</h1>", unsafe_allow_html=True)
 
@@ -139,12 +158,14 @@ if active_data:
     with tab2:
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
         st.markdown("### 💬 Ask a Doubt")
-        user_query = st.chat_input("Ask anything...")
+        user_query = st.chat_input("Ask Aura anything about this document...")
         if user_query:
-            ans = model.generate_content(f"Context: {active_data['full_text']}\nQuestion: {user_query}")
-            st.info(f"**Aura:** {ans.text}")
+            with st.spinner("Thinking..."):
+                tutor_prompt = f"Context: {active_data['full_text']}\n\nQuestion: {user_query}"
+                ans = model.generate_content(tutor_prompt)
+                st.markdown(f'<div class="tutor-bubble"><b>Aura says:</b><br><br>{ans.text}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.write("---")
-    st.markdown("### 👋 Welcome! Upload a PDF to start.")
-    st.image("https://img.freepik.com/free-vector/digital-lifestyle-concept-illustration_114360-7327.jpg", width=500)
+    st.markdown("### 👋 Welcome back! Upload a PDF in the sidebar to get started.")
+    st.image("https://img.freepik.com/free-vector/digital-lifestyle-concept-illustration_114360-7327.jpg", width=600)
