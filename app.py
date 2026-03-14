@@ -5,17 +5,12 @@ from streamlit_google_auth import Authenticate
 import json
 import os
 
-# ==========================================
 # 1. INITIAL CONFIG (MUST BE THE FIRST COMMAND)
-# ==========================================
 st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 
-# ==========================================
-# 2. AUTHENTICATION SETUP
-# ==========================================
-
-# Create the secrets file for the Google Auth library
+# 2. CREATE SECRETS FILE
 def create_secrets_file():
+    # It's better to recreate this file to ensure it's always up to date
     google_secrets = {
         "web": {
             "client_id": st.secrets["GOOGLE_CLIENT_ID"],
@@ -31,18 +26,19 @@ def create_secrets_file():
 
 create_secrets_file()
 
-# Initialize the Authenticator
-# Note: Changed 'cookie_key' to 'key' as this is the most common cause of the TypeError
+# 3. INITIALIZE AUTHENTICATOR
+# I've used 'cookie_key' and included the mandatory 'redirect_uri'
 authenticator = Authenticate(
     secret_credentials_path='client_secrets.json',
     cookie_name='aura_study_cookie',
-    key='aura_secret_key_123', 
+    cookie_key='aura_secret_key_123', 
     redirect_uri="https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app",
     cookie_expiry_days=30
 )
 
-# Check if user is already logged in
-authenticator.check_authenticity()
+# 4. CHECK AUTHENTICATION
+# Note the spelling: 'check_authentification' (with an extra 'i')
+authenticator.check_authentification()
 
 # If NOT logged in, show login screen and STOP
 if not st.session_state.get("connected"):
@@ -52,14 +48,12 @@ if not st.session_state.get("connected"):
     st.stop() 
 
 # ==========================================
-# 3. APP CONFIGURATION (Runs after login)
+# 5. REST OF THE APP (Runs after login)
 # ==========================================
 
-# API CONFIG
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 
-# SESSION STATE
 if 'history' not in st.session_state:
     st.session_state.history = []  
 if 'active_index' not in st.session_state:
@@ -105,9 +99,8 @@ model = get_model()
 with st.sidebar:
     st.markdown("<h2 style='color: #4facfe;'>✨ Aura AI</h2>", unsafe_allow_html=True)
     
-    # Display User Info
-    user = st.session_state.get('user_info', {})
-    st.write(f"Logged in: **{user.get('email', 'Student')}**")
+    user_info = st.session_state.get('user_info', {})
+    st.write(f"Logged in: **{user_info.get('email', 'Student')}**")
     
     if st.button("Logout", use_container_width=True):
         authenticator.logout()
