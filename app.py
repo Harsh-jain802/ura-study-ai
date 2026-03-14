@@ -1,59 +1,21 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import google.generativeai as genai
-from streamlit_google_auth import Authenticate
-import json
-import os
 
-# 1. INITIAL CONFIG (MUST BE THE FIRST COMMAND)
+# ==========================================
+# 1. APP CONFIGURATION
+# ==========================================
 st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 
-# 2. CREATE SECRETS FILE
-def create_secrets_file():
-    # It's better to recreate this file to ensure it's always up to date
-    google_secrets = {
-        "web": {
-            "client_id": st.secrets["GOOGLE_CLIENT_ID"],
-            "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "redirect_uris": ["https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app"]
-        }
-    }
-    with open('client_secrets.json', 'w') as f:
-        json.dump(google_secrets, f)
+# API CONFIG - Ensure 'GEMINI_API_KEY' is in your Streamlit Secrets
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=API_KEY)
+except Exception as e:
+    st.error("Error: Please add GEMINI_API_KEY to your Streamlit Secrets.")
+    st.stop()
 
-create_secrets_file()
-
-# 3. INITIALIZE AUTHENTICATOR
-# I've used 'cookie_key' and included the mandatory 'redirect_uri'
-authenticator = Authenticate(
-    secret_credentials_path='client_secrets.json',
-    cookie_name='aura_study_cookie',
-    cookie_key='aura_secret_key_123', 
-    redirect_uri="https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app",
-    cookie_expiry_days=30
-)
-
-# 4. CHECK AUTHENTICATION
-# Note the spelling: 'check_authentification' (with an extra 'i')
-authenticator.check_authentification()
-
-# If NOT logged in, show login screen and STOP
-if not st.session_state.get("connected"):
-    st.markdown("<h1 style='text-align: center; color: #4facfe;'>✨ Aura Study AI</h1>", unsafe_allow_html=True)
-    st.write("### Welcome! Please sign in with Google to access your dashboard.")
-    authenticator.login()
-    st.stop() 
-
-# ==========================================
-# 5. REST OF THE APP (Runs after login)
-# ==========================================
-
-API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=API_KEY)
-
+# SESSION STATE INITIALIZATION
 if 'history' not in st.session_state:
     st.session_state.history = []  
 if 'active_index' not in st.session_state:
@@ -70,14 +32,16 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         font-size: 3.2rem !important;
         font-weight: 800 !important;
+        margin-bottom: 20px;
     }
     .content-card {
         background: rgba(22, 27, 34, 0.7);
         border: 1px solid #30363d;
         border-radius: 20px;
-        padding: 40px;
+        padding: 30px;
         backdrop-filter: blur(12px);
         margin-top: 20px;
+        color: #e6edf3;
     }
     .tutor-bubble {
         background: rgba(79, 172, 254, 0.1);
@@ -95,17 +59,11 @@ def get_model():
 
 model = get_model()
 
-# SIDEBAR
+# ==========================================
+# 2. SIDEBAR
+# ==========================================
 with st.sidebar:
     st.markdown("<h2 style='color: #4facfe;'>✨ Aura AI</h2>", unsafe_allow_html=True)
-    
-    user_info = st.session_state.get('user_info', {})
-    st.write(f"Logged in: **{user_info.get('email', 'Student')}**")
-    
-    if st.button("Logout", use_container_width=True):
-        authenticator.logout()
-        st.rerun()
-    
     st.write("---")
     
     if st.button("➕ New Session", use_container_width=True):
@@ -118,16 +76,34 @@ with st.sidebar:
     if uploaded_file and st.button("🚀 UNLOCK KNOWLEDGE", use_container_width=True):
         with st.spinner("🧠 Aura is reading..."):
             try:
+                # Extract text from PDF
                 doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                text = "".join([doc.load_page(i).get_text() for i in range(min(5, len(doc)))])
-                prompt = f"Analyze this text and provide: Big Picture, Key Pillars, Analogy, and 2 Self-test questions: {text}"
+                # Read up to first 10 pages to avoid hitting token limits
+                text = "".join([page.get_text() for page in doc][:10])
+                
+                # Ask Gemini for a structured breakdown
+                prompt = (
+                    f"Analyze this study material and provide a detailed response including:\n"
+                    f"1. **The Big Picture** (Simplified explanation)\n"
+                    f"2. **Key Pillars** (Bullet points of main topics)\n"
+                    f"3. **Practical Analogy** (Explain like I'm 5)\n"
+                    f"4. **2 Self-test questions**\n\n"
+                    f"Text: {text[:4000]}" # Truncate for prompt efficiency
+                )
+                
                 response = model.generate_content(prompt)
-                st.session_state.history.append({"title": uploaded_file.name, "result": response.text, "full_text": text})
+                
+                # Save to history
+                st.session_state.history.append({
+                    "title": uploaded_file.name, 
+                    "result": response.text, 
+                    "full_text": text
+                })
                 st.session_state.active_index = len(st.session_state.history) - 1
                 st.balloons()
                 st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error processing PDF: {e}")
 
     st.write("---")
     st.markdown("### 🕒 Recent History")
@@ -137,13 +113,15 @@ with st.sidebar:
             st.session_state.active_index = real_idx
             st.rerun()
 
-# MAIN CONTENT
+# ==========================================
+# 3. MAIN CONTENT AREA
+# ==========================================
 st.markdown("<h1 class='hero-text'>Aura Study AI</h1>", unsafe_allow_html=True)
 
 active_data = st.session_state.history[st.session_state.active_index] if st.session_state.active_index is not None else None
 
 if active_data:
-    st.markdown(f"<p style='color: #94a3b8;'>Resource: <b>{active_data['title']}</b></p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color: #94a3b8;'>Current Resource: <b>{active_data['title']}</b></p>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["📑 Study Guide", "💬 AI Doubt Solver"])
     
     with tab1:
@@ -157,11 +135,11 @@ if active_data:
         user_query = st.chat_input("Ask Aura anything about this document...")
         if user_query:
             with st.spinner("Thinking..."):
-                tutor_prompt = f"Context: {active_data['full_text']}\n\nQuestion: {user_query}"
+                tutor_prompt = f"Context from document: {active_data['full_text'][:3000]}\n\nUser Question: {user_query}\n\nAnswer the question based on the document and explain clearly."
                 ans = model.generate_content(tutor_prompt)
                 st.markdown(f'<div class="tutor-bubble"><b>Aura says:</b><br><br>{ans.text}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.write("---")
-    st.markdown("### 👋 Welcome back! Upload a PDF in the sidebar to get started.")
+    st.markdown("### 👋 Welcome! Upload a PDF in the sidebar to begin your study session.")
     st.image("https://img.freepik.com/free-vector/digital-lifestyle-concept-illustration_114360-7327.jpg", width=600)
