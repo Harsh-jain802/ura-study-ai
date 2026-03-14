@@ -1,13 +1,15 @@
 import streamlit as st
 import fitz
 import google.generativeai as genai
-import time
 
 # ==========================================
 # 1. API CONFIGURATION
 # ==========================================
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
+
+# Force stable model
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # ==========================================
 # 2. SESSION STATE
@@ -28,7 +30,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 4. STYLING
+# 4. UI STYLING
 # ==========================================
 st.markdown("""
 <style>
@@ -90,29 +92,7 @@ margin-top:20px;
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 5. MODEL LOADER
-# ==========================================
-@st.cache_resource
-def get_model():
-    try:
-        available = [
-            m.name for m in genai.list_models()
-            if 'generateContent' in m.supported_generation_methods
-        ]
-
-        if "models/gemini-1.5-flash" in available:
-            return genai.GenerativeModel("models/gemini-1.5-flash")
-
-        return genai.GenerativeModel(available[0])
-
-    except:
-        return genai.GenerativeModel("gemini-1.5-flash")
-
-
-model = get_model()
-
-# ==========================================
-# 6. SUMMARY GENERATOR (CACHED)
+# 5. SUMMARY GENERATOR
 # ==========================================
 @st.cache_data(show_spinner=False)
 def generate_summary(text):
@@ -126,27 +106,27 @@ Analyze the following text and provide:
 Explain the main idea in 2 simple sentences.
 
 2. KEY PILLARS  
-Give 4 important bullet points.
+Give 4 bullet points.
 
 3. ANALOGY  
-Explain using a simple real-world analogy.
+Explain with a simple real-world comparison.
 
 4. SELF TEST  
-Generate 2 quiz questions to test understanding.
+Generate 2 quiz questions.
 
 TEXT:
-{text[:6000]}
+{text[:3000]}
 """
 
     try:
         response = model.generate_content(prompt)
         return response.text
 
-    except Exception:
-        return "⚠️ AI quota reached. Please try again later."
+    except Exception as e:
+        return f"AI Error: {e}"
 
 # ==========================================
-# 7. SIDEBAR
+# 6. SIDEBAR
 # ==========================================
 with st.sidebar:
 
@@ -194,7 +174,7 @@ with st.sidebar:
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error processing PDF: {e}")
 
     st.write("---")
 
@@ -214,7 +194,7 @@ with st.sidebar:
             st.rerun()
 
 # ==========================================
-# 8. MAIN CONTENT
+# 7. MAIN CONTENT
 # ==========================================
 st.markdown(
     "<h1 class='hero-text'>Aura Study AI</h1>",
@@ -241,9 +221,7 @@ if active_data:
         "💬 AI Doubt Solver"
     ])
 
-    # ==========================
-    # TAB 1
-    # ==========================
+    # Study Guide
     with tab1:
 
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
@@ -252,9 +230,7 @@ if active_data:
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # ==========================
-    # TAB 2
-    # ==========================
+    # AI Doubt Solver
     with tab2:
 
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
@@ -267,7 +243,7 @@ if active_data:
 
             with st.spinner("Tutor is thinking..."):
 
-                context = active_data["full_text"][:5000]
+                context = active_data["full_text"][:3000]
 
                 tutor_prompt = f"""
 You are a helpful tutor.
@@ -290,8 +266,8 @@ Explain clearly and simply.
                         unsafe_allow_html=True
                     )
 
-                except Exception:
-                    st.warning("⚠️ AI quota reached. Please try again later.")
+                except Exception as e:
+                    st.error(f"AI Error: {e}")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -307,11 +283,11 @@ else:
 
 Your study material is currently empty.
 
-To get started
+To get started:
 
-1 Upload a PDF in the sidebar  
+1 Upload a PDF from the sidebar  
 2 Click Unlock Knowledge  
-3 Aura will generate summaries and quizzes  
+3 Aura will generate summaries and quiz questions  
 """)
 
     st.image(
