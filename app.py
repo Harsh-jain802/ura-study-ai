@@ -15,8 +15,14 @@ except:
 
 @st.cache_resource
 def get_model():
-    # Change 'gemini-1.5-flash-8b' to 'gemini-1.5-flash'
-    return genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        # This is the standard, most reliable model for free-tier users
+        return genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        # Fallback in case of emergency
+        return genai.GenerativeModel('gemini-pro')
+
+model = get_model()
 
 model = get_model()
 
