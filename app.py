@@ -6,7 +6,7 @@ import json
 import os
 
 # ==========================================
-# 1. INITIAL CONFIG (MUST BE FIRST)
+# 1. INITIAL CONFIG (MUST BE THE FIRST COMMAND)
 # ==========================================
 st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 
@@ -14,35 +14,37 @@ st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 # 2. AUTHENTICATION SETUP
 # ==========================================
 
+# Create the secrets file for the Google Auth library
 def create_secrets_file():
-    # Only create if it doesn't exist to avoid overhead
-    if not os.path.exists('client_secrets.json'):
-        google_secrets = {
-            "web": {
-                "client_id": st.secrets["GOOGLE_CLIENT_ID"],
-                "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "redirect_uris": [st.secrets.get("REDIRECT_URI", "https://ura-study-ai.streamlit.app")]
-            }
+    google_secrets = {
+        "web": {
+            "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+            "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": ["https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app"]
         }
-        with open('client_secrets.json', 'w') as f:
-            json.dump(google_secrets, f)
+    }
+    with open('client_secrets.json', 'w') as f:
+        json.dump(google_secrets, f)
 
 create_secrets_file()
 
-# The library often uses 'key' instead of 'cookie_key'
+# Initialize the Authenticator
+# Note: Changed 'cookie_key' to 'key' as this is the most common cause of the TypeError
 authenticator = Authenticate(
     secret_credentials_path='client_secrets.json',
     cookie_name='aura_study_cookie',
-    key='aura_secret_key_123', # Changed from cookie_key to key
+    key='aura_secret_key_123', 
+    redirect_uri="https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app",
     cookie_expiry_days=30
 )
 
-# Login logic
+# Check if user is already logged in
 authenticator.check_authenticity()
 
+# If NOT logged in, show login screen and STOP
 if not st.session_state.get("connected"):
     st.markdown("<h1 style='text-align: center; color: #4facfe;'>✨ Aura Study AI</h1>", unsafe_allow_html=True)
     st.write("### Welcome! Please sign in with Google to access your dashboard.")
@@ -50,14 +52,14 @@ if not st.session_state.get("connected"):
     st.stop() 
 
 # ==========================================
-# 3. APP CONTENT (Runs after successful login)
+# 3. APP CONFIGURATION (Runs after login)
 # ==========================================
 
 # API CONFIG
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 
-# SESSION STATE INITIALIZATION
+# SESSION STATE
 if 'history' not in st.session_state:
     st.session_state.history = []  
 if 'active_index' not in st.session_state:
@@ -104,8 +106,8 @@ with st.sidebar:
     st.markdown("<h2 style='color: #4facfe;'>✨ Aura AI</h2>", unsafe_allow_html=True)
     
     # Display User Info
-    user_info = st.session_state.get('user_info', {})
-    st.write(f"Logged in: **{user_info.get('email', 'Student')}**")
+    user = st.session_state.get('user_info', {})
+    st.write(f"Logged in: **{user.get('email', 'Student')}**")
     
     if st.button("Logout", use_container_width=True):
         authenticator.logout()
@@ -132,7 +134,7 @@ with st.sidebar:
                 st.balloons()
                 st.rerun()
             except Exception as e:
-                st.error(f"Error processing PDF: {e}")
+                st.error(f"Error: {e}")
 
     st.write("---")
     st.markdown("### 🕒 Recent History")
