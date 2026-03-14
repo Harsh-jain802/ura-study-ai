@@ -6,57 +6,58 @@ import json
 import os
 
 # ==========================================
-# 1. AUTHENTICATION & SECRET FILE CREATION
+# 1. INITIAL CONFIG (MUST BE FIRST)
+# ==========================================
+st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
+
+# ==========================================
+# 2. AUTHENTICATION SETUP
 # ==========================================
 
-# This part creates the 'client_secrets.json' file that the library needs
 def create_secrets_file():
-    google_secrets = {
-        "web": {
-            "client_id": st.secrets["GOOGLE_CLIENT_ID"],
-            "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "redirect_uris": ["https://ura-study-ai-ju8ey5voyozp46sez29dof.streamlit.app"]
+    # Only create if it doesn't exist to avoid overhead
+    if not os.path.exists('client_secrets.json'):
+        google_secrets = {
+            "web": {
+                "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+                "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "redirect_uris": [st.secrets.get("REDIRECT_URI", "https://ura-study-ai.streamlit.app")]
+            }
         }
-    }
-    with open('client_secrets.json', 'w') as f:
-        json.dump(google_secrets, f)
+        with open('client_secrets.json', 'w') as f:
+            json.dump(google_secrets, f)
 
-# Run the file creator
 create_secrets_file()
 
-# Initialize the Authenticator using the file path
-# We use only the 4 standard arguments to avoid TypeErrors
+# The library often uses 'key' instead of 'cookie_key'
 authenticator = Authenticate(
     secret_credentials_path='client_secrets.json',
     cookie_name='aura_study_cookie',
-    cookie_key='aura_secret_key_123',
+    key='aura_secret_key_123', # Changed from cookie_key to key
     cookie_expiry_days=30
 )
 
-# Check login status
+# Login logic
 authenticator.check_authenticity()
 
-# If NOT logged in, show login screen and STOP
 if not st.session_state.get("connected"):
-    st.set_page_config(page_title="Aura AI - Login", page_icon="✨")
     st.markdown("<h1 style='text-align: center; color: #4facfe;'>✨ Aura Study AI</h1>", unsafe_allow_html=True)
     st.write("### Welcome! Please sign in with Google to access your dashboard.")
     authenticator.login()
     st.stop() 
 
 # ==========================================
-# 2. APP CONFIGURATION (Runs after login)
+# 3. APP CONTENT (Runs after successful login)
 # ==========================================
-st.set_page_config(page_title="Aura Study AI", page_icon="✨", layout="wide")
 
 # API CONFIG
 API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=API_KEY)
 
-# SESSION STATE
+# SESSION STATE INITIALIZATION
 if 'history' not in st.session_state:
     st.session_state.history = []  
 if 'active_index' not in st.session_state:
@@ -103,8 +104,8 @@ with st.sidebar:
     st.markdown("<h2 style='color: #4facfe;'>✨ Aura AI</h2>", unsafe_allow_html=True)
     
     # Display User Info
-    user = st.session_state.get('user_info', {})
-    st.write(f"Logged in: **{user.get('email', 'Student')}**")
+    user_info = st.session_state.get('user_info', {})
+    st.write(f"Logged in: **{user_info.get('email', 'Student')}**")
     
     if st.button("Logout", use_container_width=True):
         authenticator.logout()
@@ -131,7 +132,7 @@ with st.sidebar:
                 st.balloons()
                 st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error processing PDF: {e}")
 
     st.write("---")
     st.markdown("### 🕒 Recent History")
