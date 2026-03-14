@@ -15,8 +15,8 @@ except:
 
 @st.cache_resource
 def get_model():
-    # Using 'gemini-1.5-flash-8b' which is more efficient for free-tier limits
-    return genai.GenerativeModel('gemini-1.5-flash-8b')
+    # Change 'gemini-1.5-flash-8b' to 'gemini-1.5-flash'
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 model = get_model()
 
