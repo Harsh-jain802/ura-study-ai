@@ -5,8 +5,12 @@ import google.generativeai as genai
 # ==========================================
 # 1. API CONFIGURATION
 # ==========================================
-API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=API_KEY)
+# Ensure you have GEMINI_API_KEY in your .streamlit/secrets.toml
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=API_KEY)
+except Exception as e:
+    st.error("API Key not found. Please set GEMINI_API_KEY in Streamlit secrets.")
 
 # ==========================================
 # 2. SESSION STATE
@@ -42,6 +46,8 @@ st.markdown("""
         padding: 40px;
         backdrop-filter: blur(12px);
         margin-top: 20px;
+        color: #e6edf3;
+        line-height: 1.6;
     }
     
     .hero-text {
@@ -102,22 +108,54 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Drop PDF here", type="pdf", label_visibility="collapsed")
     
     if uploaded_file and st.button("🚀 UNLOCK KNOWLEDGE", use_container_width=True):
-        with st.spinner("🧠 Aura is reading..."):
+        with st.spinner("🧠 Aura is performing a deep scan of your document..."):
             try:
+                # Open PDF
                 doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                text = "".join([doc.load_page(i).get_text() for i in range(min(5, len(doc)))])
                 
+                # EXTRACT TEXT: We increased the limit to 30 pages for a more detailed analysis
+                num_pages = min(30, len(doc))
+                text = ""
+                for i in range(num_pages):
+                    text += doc.load_page(i).get_text()
+                
+                # THE DETAILED PROMPT
                 prompt = f"""
-                Analyze this text and provide:
-                1. 🎯 THE BIG PICTURE: 2 simple sentences.
-                2. 📑 KEY PILLARS: 4 bullet points.
-                3. 💡 ANALOGY: A simple comparison.
-                4. ❓ SELF-TEST: 2 questions.
+                Act as an expert academic professor. I will provide you with text from a document. 
+                Your goal is to create a COMPREHENSIVE, HIGH-LEVEL STUDY GUIDE. 
+                
+                Please structure your output exactly like this:
 
-                TEXT: {text}
+                # 📖 DETAILED ANALYSIS: {uploaded_file.name}
+
+                ## 🎯 THE BIG PICTURE
+                Provide a detailed 2-paragraph executive summary of the core message and purpose of this document.
+
+                ## 🔍 KEY THEMES & PILLARS
+                Break down the main topics into detailed sections. For every main theme:
+                - Explain the core concept in depth.
+                - List secondary details or supporting evidence.
+                - Mention any specific examples found in the text.
+
+                ## 💡 COMPLEX CONCEPTS & ANALOGIES
+                Identify the 3 most difficult concepts in this text and explain them using simple, real-world analogies.
+
+                ## 📑 GLOSSARY OF TERMS
+                List and define at least 5-8 key technical terms or vocabulary words used in this text.
+
+                ## 🎓 CRITICAL TAKEAWAYS
+                What are the top 5 most important things a student should remember from this material for an exam?
+
+                ## ❓ CHALLENGE QUESTIONS
+                Provide 4 deep-thinking questions (with hidden answers if possible) to test mastery of the subject.
+
+                ---
+                DOCUMENT TEXT:
+                {text}
                 """
                 
                 response = model.generate_content(prompt)
+                
                 st.session_state.history.append({
                     "title": uploaded_file.name, 
                     "result": response.text,
@@ -127,7 +165,7 @@ with st.sidebar:
                 st.balloons()
                 st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error processing PDF: {e}")
 
     st.write("---")
     st.markdown("### 🕒 Recent History")
@@ -148,23 +186,30 @@ if active_data:
     st.markdown(f"<p style='color: #94a3b8;'>Current Resource: <b>{active_data['title']}</b></p>", unsafe_allow_html=True)
     
     # Using Tabs to save space and organize features
-    tab1, tab2 = st.tabs(["📑 Study Guide", "💬 AI Doubt Solver"])
+    tab1, tab2 = st.tabs(["📑 Detailed Study Guide", "💬 Interactive Tutor"])
     
     with tab1:
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
+        # Displaying the AI result with Markdown
         st.markdown(active_data['result'])
         st.markdown('</div>', unsafe_allow_html=True)
         
     with tab2:
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
         st.markdown("### 💬 Ask a Doubt")
-        st.write("Ask anything about this document and Aura will explain it simply.")
+        st.write("Aura has read your document. Ask anything for a simplified explanation.")
         
-        user_query = st.chat_input("Explain the concept of...")
+        user_query = st.chat_input("Explain the part about...")
         
         if user_query:
-            with st.spinner("Tutor is thinking..."):
-                tutor_prompt = f"Context: {active_data['full_text']}\n\nQuestion: {user_query}"
+            with st.spinner("Aura is typing..."):
+                tutor_prompt = f"""
+                You are Aura, an AI Tutor. Use the context below to answer the student's question.
+                If the answer isn't in the text, use your general knowledge but mention it's not in the document.
+                
+                CONTEXT: {active_data['full_text']}
+                QUESTION: {user_query}
+                """
                 ans = model.generate_content(tutor_prompt)
                 st.markdown(f'<div class="tutor-bubble"><b>Aura says:</b><br><br>{ans.text}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -174,11 +219,11 @@ else:
     st.write("---")
     st.markdown("""
     ### 👋 Welcome to Aura.
-    Your study material is currently empty. 
+    Your intelligent study companion.
     
-    **To get started:**
-    1. Look at the **Sidebar** on the left.
-    2. Upload a **PDF** (Textbook, Research Paper, or Notes).
-    3. Click **Unlock Knowledge**.
+    **How to use:**
+    1. Upload a **PDF** (Research paper, textbook chapter, or notes) in the sidebar.
+    2. Click **Unlock Knowledge**.
+    3. Aura will generate a **Deep Study Guide** and you can chat with it to clear doubts.
     """)
     st.image("https://img.freepik.com/free-vector/digital-lifestyle-concept-illustration_114360-7327.jpg", width=600)
